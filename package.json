@@ -1,0 +1,13 @@
+{
+  "name": "mashiltax",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MashilTax — Simple personal tax assistant for Malaysia",
+  "scripts": {
+    "dev": "wrangler pages dev . --port 8788",
+    "deploy": "wrangler pages deploy . --project-name mashiltax"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}
