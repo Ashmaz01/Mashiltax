@@ -4,8 +4,9 @@
   "private": true,
   "description": "MashilTax — Simple personal tax assistant for Malaysia",
   "scripts": {
+    "build": "mkdir -p dist/js && cp index.html styles.css dist/ && cp -r js/* dist/js/",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "npm run build && wrangler deploy"
   },
   "devDependencies": {
     "wrangler": "^4"
