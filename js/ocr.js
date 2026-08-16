@@ -1,6 +1,5 @@
 import { resizeImage } from './utils.js';
 
-const AMOUNT_RE = /(?:RM|MYR)\s*([\d,]+\.?\d*)|(?:TOTAL|AMOUNT|JUMLAH|GRAND\s*TOTAL|NET\s*TOTAL|BAYAR)[:\s]*(?:RM|MYR)?\s*([\d,]+\.\d{2})/gi;
 const DATE_RE = /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/g;
 const MALAY_DATE_RE = /(\d{1,2})\s+(Jan(?:uari)?|Feb(?:ruari)?|Mac|Apr(?:il)?|Mei|Jun|Jul(?:ai)?|Ogos?|Sep(?:tember)?|Okt(?:ober)?|Nov(?:ember)?|Dis(?:ember)?)\s+(\d{2,4})/gi;
 
@@ -12,8 +11,8 @@ const MONTH_MAP = {
 
 const CATEGORY_KEYWORDS = {
   'Medical': ['clinic','hospital','pharmacy','farmasi','klinik','medical','ubat','doctor','doktor','health','kesihatan','dental','pergigian'],
-  'Education': ['university','universiti','college','kolej','tuition','school','sekolah','course','kursus','training','education','pendidikan','book','buku'],
-  'Lifestyle': ['phone','laptop','computer','tablet','internet','broadband','newspaper','magazine','book','subscription'],
+  'Education': ['university','universiti','college','kolej','tuition','school','sekolah','course','kursus','training','education','pendidikan','book','buku','bookcafe','bookstore'],
+  'Lifestyle': ['phone','laptop','computer','tablet','internet','broadband','newspaper','magazine','subscription'],
   'Sports & Fitness': ['gym','fitness','sport','sukan','badminton','swimming','yoga','exercise'],
   'Insurance': ['insurance','insurans','takaful','premium','polisi'],
   'Childcare': ['nursery','kindergarten','tadika','taska','childcare','daycare'],
@@ -22,32 +21,43 @@ const CATEGORY_KEYWORDS = {
   'Donations': ['donation','derma','sumbangan','zakat','wakaf','masjid','mosque'],
 };
 
+const TOTAL_PATTERNS = [
+  /NETT?\s*TOTAL/i,
+  /GRAND\s*TOTAL/i,
+  /JUMLAH\s*BESAR/i,
+  /TOTAL\s*(?:AMOUNT|BAYAR|HARGA)/i,
+];
+const SUBTOTAL_PATTERNS = [
+  /SUB\s*TOTAL/i,
+  /TOTAL/i,
+  /JUMLAH/i,
+  /AMOUNT/i,
+  /BAYAR/i,
+];
+
 function parseAmount(text) {
-  let best = null;
-  let bestPriority = -1;
   const lines = text.split('\n');
 
-  for (const line of lines) {
-    const upper = line.toUpperCase();
-    let priority = 0;
-    if (/GRAND\s*TOTAL|JUMLAH\s*BESAR/i.test(upper)) priority = 4;
-    else if (/TOTAL|JUMLAH/i.test(upper)) priority = 3;
-    else if (/AMOUNT|BAYAR|NET/i.test(upper)) priority = 2;
-    else if (/RM|MYR/i.test(upper)) priority = 1;
-
-    if (priority === 0) continue;
-
-    const matches = [...line.matchAll(/(?:RM|MYR)?\s*([\d,]+\.\d{2})/gi)];
-    for (const m of matches) {
-      const val = parseFloat(m[1].replace(/,/g, ''));
-      if (val > 0 && priority > bestPriority) {
-        best = val;
-        bestPriority = priority;
+  for (const patterns of [TOTAL_PATTERNS, SUBTOTAL_PATTERNS]) {
+    for (const line of lines) {
+      for (const pat of patterns) {
+        if (pat.test(line)) {
+          const amounts = [...line.matchAll(/(\d{1,3}(?:,\d{3})*\.\d{2})/g)]
+            .map(m => parseFloat(m[1].replace(/,/g, '')))
+            .filter(v => v > 0);
+          if (amounts.length) return Math.max(...amounts);
+        }
       }
     }
   }
 
-  if (best) return best;
+  const rmLines = lines.filter(l => /RM|MYR/i.test(l));
+  for (const line of rmLines) {
+    const amounts = [...line.matchAll(/(?:RM|MYR)\s*([\d,]+\.\d{2})/gi)]
+      .map(m => parseFloat(m[1].replace(/,/g, '')))
+      .filter(v => v > 0);
+    if (amounts.length) return Math.max(...amounts);
+  }
 
   const allAmounts = [...text.matchAll(/(\d{1,3}(?:,\d{3})*\.\d{2})/g)]
     .map(m => parseFloat(m[1].replace(/,/g, '')))
@@ -75,7 +85,6 @@ function parseDate(text) {
     let day, month, year;
     c = parseInt(c);
     if (c < 100) c += 2000;
-
     if (c >= 2000 && c <= 2099) {
       day = parseInt(a);
       month = parseInt(b);
@@ -83,7 +92,6 @@ function parseDate(text) {
     } else {
       continue;
     }
-
     if (month > 12) { [day, month] = [month, day]; }
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 2000) {
       return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -94,15 +102,77 @@ function parseDate(text) {
 
 function parseMerchant(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 2);
-  for (const line of lines.slice(0, 6)) {
+  const skipRe = /^(date|tarikh|masa|time|tel|fax|no\.|tax|gst|sst|invoice|receipt|resit|order|cashier|welcome|qty|item|disc)/i;
+  const junkRe = /RM|MYR|\d{2}[\/\-.]\d{2}/i;
+
+  for (const line of lines.slice(0, 8)) {
     const clean = line.replace(/[^a-zA-Z0-9\s&'.,-]/g, '').trim();
     if (clean.length < 3) continue;
     if (/^\d+$/.test(clean)) continue;
-    if (/^(date|tarikh|masa|time|tel|fax|no|tax|gst|sst|invoice|receipt|resit)/i.test(clean)) continue;
-    if (/RM|MYR|\d{2}[\/\-.]\d{2}/i.test(clean)) continue;
+    if (skipRe.test(clean)) continue;
+    if (junkRe.test(clean)) continue;
+
+    const letters = clean.replace(/[^a-zA-Z]/g, '').length;
+    if (letters < 3) continue;
+
     return clean.slice(0, 80);
   }
   return '';
+}
+
+function parseLineItems(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const items = [];
+  const stopRe = /^(sub\s*total|total|jumlah|nett|grand|tax|sst|gst|rounding|voucher|change|tunai|kad|cash|plastik\b.*(?:bag|beg))/i;
+  const priceLineRe = /(\d+)\s*[xX×]\s*(\d{1,3}(?:,\d{3})*\.\d{2})/;
+  const trailingPriceRe = /(\d{1,3}(?:,\d{3})*\.\d{2})\s*$/;
+
+  let itemName = '';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (stopRe.test(line)) break;
+
+    const qtyMatch = priceLineRe.exec(line);
+    if (qtyMatch) {
+      const qty = parseInt(qtyMatch[1]);
+      const unitPrice = parseFloat(qtyMatch[2].replace(/,/g, ''));
+
+      const nettMatch = trailingPriceRe.exec(line);
+      const nett = nettMatch ? parseFloat(nettMatch[1].replace(/,/g, '')) : qty * unitPrice;
+
+      if (itemName && unitPrice > 0) {
+        items.push({
+          name: itemName.slice(0, 120),
+          qty,
+          unit_price: unitPrice,
+          amount: nett,
+        });
+      }
+      itemName = '';
+      continue;
+    }
+
+    if (/^(SKU|Disc\s|disc\s|\*\*)/i.test(line)) continue;
+
+    const priceMatch = trailingPriceRe.exec(line);
+    if (priceMatch) {
+      const amount = parseFloat(priceMatch[1].replace(/,/g, ''));
+      const name = line.replace(trailingPriceRe, '').replace(/RM|MYR/gi, '').trim();
+      if (name.length > 2 && amount > 0 && !stopRe.test(line)) {
+        items.push({ name: name.slice(0, 120), qty: 1, unit_price: amount, amount });
+        itemName = '';
+        continue;
+      }
+    }
+
+    const cleaned = line.replace(/[^a-zA-Z0-9\s&'.,()\-]/g, '').trim();
+    if (cleaned.length > 2 && /[a-zA-Z]{2}/.test(cleaned)) {
+      itemName = itemName ? itemName + ' ' + cleaned : cleaned;
+    }
+  }
+
+  return items;
 }
 
 function guessCategory(text) {
@@ -150,12 +220,16 @@ export async function runOCR(file) {
       return null;
     }
 
+    const lineItems = parseLineItems(text);
+    const totalFromItems = lineItems.reduce((s, it) => s + it.amount, 0);
+
     return {
       document_type: guessDocType(text),
       merchant: parseMerchant(text),
       date: parseDate(text),
-      amount: parseAmount(text),
+      amount: parseAmount(text) || (totalFromItems > 0 ? totalFromItems : null),
       category: guessCategory(text),
+      line_items: lineItems,
       description: text.split('\n').filter(l => l.trim()).slice(0, 3).join(' ').slice(0, 120),
       confidence: Math.round(confidence),
       raw_text: text,

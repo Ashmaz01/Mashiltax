@@ -149,6 +149,7 @@ export async function renderDocuments(container, ctx, docId) {
         category: ocrResult?.category || '',
         relief_category: ocrResult?.category ? (RELIEF_MAP[ocrResult.category] || '') : '',
         description: ocrResult?.description || '',
+        line_items: ocrResult?.line_items || [],
         status: ocrResult ? 'processed' : 'pending',
         ocr_confidence: ocrResult?.confidence || null,
         ocr_raw: ocrResult || null,
@@ -281,6 +282,13 @@ async function renderDocumentDetail(container, ctx, docId) {
             <button class="btn danger" id="btn-delete-doc">Delete</button>
           </div>
         </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Line Items</h2>
+          <button class="btn small" id="btn-add-item" style="font-size:13px; padding:4px 12px;">+ Add</button>
+        </div>
+        <div id="line-items-list" style="padding:0 20px 16px;"></div>
       </div>`;
 
     container.querySelector('#btn-back').addEventListener('click', () => ctx.navigate('/documents'));
@@ -288,6 +296,58 @@ async function renderDocumentDetail(container, ctx, docId) {
     container.querySelector('#doc-category').addEventListener('change', (e) => {
       const reliefInput = container.querySelector('#doc-relief');
       reliefInput.value = RELIEF_MAP[e.target.value] || '';
+    });
+
+    let lineItems = Array.isArray(doc.line_items) ? [...doc.line_items] : [];
+
+    function renderLineItems() {
+      const listEl = container.querySelector('#line-items-list');
+      if (!lineItems.length) {
+        listEl.innerHTML = '<div class="empty-state" style="padding:12px 0;">No items yet. Tap + Add to add one.</div>';
+        return;
+      }
+      listEl.innerHTML = lineItems.map((item, i) => `
+        <div class="line-item" style="display:flex; gap:8px; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--border,#e5e0d5);">
+          <div style="flex:1; min-width:0;">
+            <input class="form-input" data-idx="${i}" data-field="name" value="${escapeHtml(item.name || '')}" placeholder="Item name" style="margin-bottom:6px;">
+            <div style="display:flex; gap:6px;">
+              <input class="form-input" data-idx="${i}" data-field="qty" type="number" value="${item.qty || 1}" min="1" style="width:50px; text-align:center;" title="Qty">
+              <input class="form-input" data-idx="${i}" data-field="unit_price" type="number" value="${item.unit_price || ''}" step="0.01" placeholder="Unit price" style="flex:1;" title="Unit price">
+              <input class="form-input" data-idx="${i}" data-field="amount" type="number" value="${item.amount || ''}" step="0.01" placeholder="Amount" style="flex:1; font-weight:600;" title="Nett amount">
+            </div>
+          </div>
+          <button class="btn danger small" data-remove="${i}" style="padding:4px 8px; font-size:12px; margin-top:2px;" title="Remove">✕</button>
+        </div>`).join('') +
+        `<div class="doc-meta" style="text-align:right; padding:8px 0; font-weight:600;">
+          Total: RM ${lineItems.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0).toFixed(2)}
+        </div>`;
+
+      listEl.querySelectorAll('[data-field]').forEach(inp => {
+        inp.addEventListener('change', () => {
+          const idx = parseInt(inp.dataset.idx);
+          const field = inp.dataset.field;
+          lineItems[idx][field] = field === 'name' ? inp.value : parseFloat(inp.value) || 0;
+          if (field === 'qty' || field === 'unit_price') {
+            lineItems[idx].amount = lineItems[idx].qty * lineItems[idx].unit_price;
+          }
+          renderLineItems();
+        });
+      });
+      listEl.querySelectorAll('[data-remove]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          lineItems.splice(parseInt(btn.dataset.remove), 1);
+          renderLineItems();
+        });
+      });
+    }
+
+    renderLineItems();
+
+    container.querySelector('#btn-add-item').addEventListener('click', () => {
+      lineItems.push({ name: '', qty: 1, unit_price: 0, amount: 0 });
+      renderLineItems();
+      const lastInput = container.querySelector('#line-items-list .line-item:last-child input[data-field="name"]');
+      if (lastInput) lastInput.focus();
     });
 
     container.querySelector('#btn-save-doc').addEventListener('click', async () => {
@@ -300,6 +360,7 @@ async function renderDocumentDetail(container, ctx, docId) {
           category: container.querySelector('#doc-category').value,
           relief_category: container.querySelector('#doc-relief').value,
           description: container.querySelector('#doc-desc').value.trim(),
+          line_items: lineItems,
           status: 'reviewed',
         });
         showToast('Document updated');
