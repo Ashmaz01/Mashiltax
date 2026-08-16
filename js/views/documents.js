@@ -61,7 +61,7 @@ export async function renderDocuments(container, ctx, docId) {
       <div class="card-head">
         <h2>Upload Document</h2>
       </div>
-      <div class="upload-zone" id="upload-zone" style="margin:16px 20px;"
+      <div class="upload-zone" id="upload-zone" style="margin:16px 20px;">
         <div class="upload-icon">${ctx.icons.upload}</div>
         <div class="upload-text">Tap to upload or drag a file here</div>
         <div class="upload-hint">Photos, scans, PDFs — up to 10 MB</div>
@@ -139,7 +139,7 @@ export async function renderDocuments(container, ctx, docId) {
       statusEl.textContent = 'Saving document record...';
       const docRecord = {
         file_path: filePath,
-        file_name: file.name,
+        file_name: file.name || 'photo.jpg',
         file_size: file.size,
         mime_type: file.type,
         document_type: ocrResult?.document_type || 'receipt',

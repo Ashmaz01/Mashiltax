@@ -92,7 +92,7 @@ export async function deleteIncomeRecord(id) {
 }
 
 export async function uploadDocument(file, userId) {
-  const ext = file.name.split('.').pop() || 'jpg';
+  const ext = (file.name ? file.name.split('.').pop() : null) || 'jpg';
   const safeName = `${Date.now()}.${ext}`;
   const path = `${userId}/${safeName}`;
   const { error } = await sb.storage.from('documents').upload(path, file, {
