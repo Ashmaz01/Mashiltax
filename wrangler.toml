@@ -1,4 +1,5 @@
 name = "mashiltax"
 compatibility_date = "2025-01-01"
-pages_build_output_dir = "."
-# Static site, no build step
+
+[assets]
+directory = "."
