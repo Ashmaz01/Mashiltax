@@ -1,8 +1,9 @@
 import {
   uploadDocument, saveDocument, updateDocument, getDocuments, getDocument,
-  getDocumentUrl, deleteDocument, processOCR, getSession,
+  getDocumentUrl, deleteDocument, getSession,
 } from '../supabase.js';
 import { fmt, escapeHtml, formatDate, formatDateInput, showToast, resizeImage } from '../utils.js';
+import { runOCR } from '../ocr.js';
 
 const DOC_TYPES = [
   { value: 'all', label: 'All' },
@@ -125,15 +126,14 @@ export async function renderDocuments(container, ctx, docId) {
       statusEl.textContent = 'Uploading to secure storage...';
       const filePath = await uploadDocument(uploadFile, userId);
 
-      statusEl.textContent = 'Processing with OCR...';
+      statusEl.textContent = 'Reading document (OCR)...';
       let ocrResult = null;
-      try {
-        const ocrFile = file.type.startsWith('image/')
-          ? await resizeImage(file, 1024)
-          : file;
-        ocrResult = await processOCR(ocrFile);
-      } catch {
-        ocrResult = null;
+      if (file.type.startsWith('image/')) {
+        try {
+          ocrResult = await runOCR(file);
+        } catch {
+          ocrResult = null;
+        }
       }
 
       statusEl.textContent = 'Saving document record...';

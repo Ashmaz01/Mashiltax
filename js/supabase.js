@@ -207,15 +207,3 @@ export async function getDashboardStats() {
   };
 }
 
-export async function processOCR(file) {
-  const formData = new FormData();
-  formData.append('image', file);
-  const session = await getSession();
-  const resp = await fetch(CONFIG.ocrEndpoint, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${session.access_token}` },
-    body: formData,
-  });
-  if (!resp.ok) throw new Error('OCR processing failed');
-  return resp.json();
-}
